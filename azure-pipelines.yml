@@ -45,14 +45,14 @@ steps:
 - task: Veracode@3
   inputs:
     ConnectionDetailsSelection: 'Service Connection' # access Veracode with service connection or Veracode API credentials
-    AnalysisService: 'Veracode Service Account' # service connection name for accessing Veracode
+    AnalysisService: 'veracodeservice' # service connection name for accessing Veracode
     veracodeAppProfile: '$(system.teamProject)' # Veracode application profile to scan
     version: '$(build.buildNumber)' # name of the scan to run
     filepath: '$(System.DefaultWorkingDirectory)/bin/Debug' # filepath or folderpath of files to upload to Veracode
     optargs: '-criticality high -include *.dll -createsandbox true -sandboxname mysandbox -deleteIncompleteScan 1' # scan criticality is high, include DLL modules, exclude EXE modules, create sandbox mysandbox during scan, delete a scan with status of incomplete, no modules defined, failed, or cancelled 
     createSandBox: false # true to scan of new development sandbox
     createProfile: true # false to enforce using existing profiles
-    failBuildIfUploadAndScanBuildStepFails: false # true to fail build if Upload and Scan task fails to start
+    failBuildIfUploadAndScanBuildStepFails: true # true to fail build if Upload and Scan task fails to start
     importResults: true # required to view Veracode results in Azure DevOps
     failBuildOnPolicyFail: false # true to fail the build if application fails policy
     maximumWaitTime: '360' # wait time, in minutes, to fail the build if no scan results available
