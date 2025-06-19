@@ -1,46 +1,58 @@
-# ASP.NET
-# Build and test ASP.NET projects.
-# Add steps that publish symbols, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
-# This is an example of using VeraDemoDotNet test application with the Veracode Static Pipeline scanner.  A Veracode subscription is required.
+# .NET Desktop
+# Build and run tests for .NET Desktop or Windows classic desktop solutions.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/apps/windows/dot-net
 
 trigger:
-- main
+- master
 
 pool:
-  name: 'azureagent'
+  vmImage: 'windows-latest'
 
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
-
+   solution: '**/*.sln'
+   buildPlatform: 'Any CPU'
+   buildConfiguration: 'Debug' # required as part of Veracode packaging for task: VSBuild@1
+ 
 steps:
 - task: NuGetToolInstaller@1
-
+ 
 - task: NuGetCommand@2
   inputs:
     restoreSolution: '$(solution)'
-
-- task: DotNetCoreCLI@2
+ 
+- task: VSBuild@1
   inputs:
-    command: 'publish'
-    publishWebProjects: true
-    projects: '$(solution)'  # You can specify the solution file here (e.g., *.sln or path to a solution)
-    arguments: '--configuration $(buildConfiguration) --output $(build.artifactStagingDirectory) --runtime linux-x64 --self-contained false'
-    zipAfterPublish: true
-
-- task: CmdLine@2
-  displayName: Veracode Static Pipeline Scanner
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+ 
+- task: VSTest@2
   inputs:
-    script: |
-      curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
-      unzip -o pipeline-scan-LATEST.zip
-      java -jar pipeline-scan.jar -vid $(VERACODE_API_ID) -vkey $(VERACODE_API_KEY) -f $(build.artifactstagingdirectory)\Verademo-dotnet.zip || true
-
-- task: PublishBuildArtifacts@1
-  displayName: Create Build Artifact for Veracode Static Pipeline Scanner Results
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+ 
+- task: DownloadPipelineArtifact@2
   inputs:
-    PathtoPublish: 'results.json'
-    ArtifactName: 'Build'
-    publishLocation: 'Container'
+    patterns: '**/*.exe,**/*.dll,**/*.pdb' # ensures Veracode gets the PDB files for Static Analyisis
+ 
+# This task makes the pipeline build artifacts available in a known location for upload to Veracode
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: $(System.DefaultWorkingDirectory)/bin/Debug
+    artifactName: Debug
+     
+- task: Veracode@3
+  inputs:
+    ConnectionDetailsSelection: 'Service Connection' # access Veracode with service connection or Veracode API credentials
+    AnalysisService: 'Veracode Service Account' # service connection name for accessing Veracode
+    veracodeAppProfile: '$(system.teamProject)' # Veracode application profile to scan
+    version: '$(build.buildNumber)' # name of the scan to run
+    filepath: '$(System.DefaultWorkingDirectory)/bin/Debug' # filepath or folderpath of files to upload to Veracode
+    optargs: '-criticality high -include *.dll -createsandbox true -sandboxname mysandbox -deleteIncompleteScan 1' # scan criticality is high, include DLL modules, exclude EXE modules, create sandbox mysandbox during scan, delete a scan with status of incomplete, no modules defined, failed, or cancelled 
+    createSandBox: false # true to scan of new development sandbox
+    createProfile: true # false to enforce using existing profiles
+    failBuildIfUploadAndScanBuildStepFails: false # true to fail build if Upload and Scan task fails to start
+    importResults: true # required to view Veracode results in Azure DevOps
+    failBuildOnPolicyFail: false # true to fail the build if application fails policy
+    maximumWaitTime: '360' # wait time, in minutes, to fail the build if no scan results available
